@@ -425,6 +425,131 @@ export default {
             });
         }
 
+        // Update the level list
+        if (url.pathname === "/update-list") {
+            if (request.method !== "POST") {
+                return json(
+                    {
+                        ok: false,
+                        error: "Use POST for /update-list.",
+                    },
+                    405
+                );
+            }
+
+            let body;
+
+            try {
+                body = await request.json();
+            } catch {
+                return json(
+                    {
+                        ok: false,
+                        error: "Invalid JSON body.",
+                    },
+                    400
+                );
+            }
+
+            if (!Array.isArray(body.levels)) {
+                return json(
+                    {
+                        ok: false,
+                        error: '"levels" must be an array.',
+                    },
+                    400
+                );
+            }
+
+            const levels = body.levels;
+
+            const filePath =
+                `/repos/${REPO}/contents/data/_list.json`;
+
+            let existingSha;
+
+            const existingResponse = await githubRequest(
+                `${filePath}?ref=${BRANCH}`,
+                env
+            );
+
+            if (existingResponse.ok) {
+                const existingFile =
+                    await existingResponse.json();
+
+                existingSha = existingFile.sha;
+            } else if (existingResponse.status !== 404) {
+                const errorText =
+                    await existingResponse.text();
+
+                return json(
+                    {
+                        ok: false,
+                        status: existingResponse.status,
+                        githubResponse: errorText,
+                    },
+                    502
+                );
+            }
+
+            const content = encodeBase64(
+                JSON.stringify(levels, null, 4) + "\n"
+            );
+
+            const response = await githubRequest(
+                filePath,
+                env,
+                {
+                    method: "PUT",
+
+                    body: JSON.stringify({
+                        message:
+                            "Admin: update Demon List placements",
+
+                        content,
+
+                        branch: BRANCH,
+
+                        ...(existingSha
+                            ? { sha: existingSha }
+                            : {}),
+                    }),
+                }
+            );
+
+            const responseText =
+                await response.text();
+
+            if (!response.ok) {
+                return json(
+                    {
+                        ok: false,
+                        status: response.status,
+                        githubResponse: responseText,
+                    },
+                    502
+                );
+            }
+
+            const result =
+                JSON.parse(responseText);
+
+            return json({
+                ok: true,
+
+                message:
+                    "Demon List successfully updated.",
+
+                branch: BRANCH,
+
+                file: result.content?.path,
+
+                sha: result.content?.sha,
+
+                commit: result.commit?.sha,
+            });
+        }
+
         return json(
             {
                 ok: false,
